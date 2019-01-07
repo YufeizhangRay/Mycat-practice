@@ -711,7 +711,9 @@ keepalive安装  （192.168.8.35 -> MASTER   192.168.8.151 -> BACKUP ）
 启动keepalived，执行命令 service keepalived start
 	
 应用通过访问192.168.8.233 即访问抢占了vip（192.168.8.233）的物理机（192.168.8.35）。
-通过上面的配置，我们可以将前端的请求转到抢占了vip（192.168.8.233）的物理机（192.168.8.35）。但是没有通过监听haproxy的服务，或者说我们没有根据haproxy服务来进行vip的降级。keepalived提供了很多的配置来做服务的检测和降级，但是我们今天不学keepalived的方式我们采用一种定时任务（linux自带的crontab）的方式来做。
+通过上面的配置，我们可以将前端的请求转到抢占了vip（192.168.8.233）的物理机（192.168.8.35）。
+但是没有通过监听haproxy的服务，或者说我们没有根据haproxy服务来进行vip的降级。
+keepalived提供了很多的配置来做服务的检测和降级，但是我们今天不学keepalived的方式我们采用一种定时任务（linux自带的crontab）的方式来做。
 	
 1.创建check_haproxy.sh 并编辑内容  vi /root/script/check_haproxy.sh
 	内容如下：
