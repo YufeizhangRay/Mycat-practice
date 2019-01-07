@@ -81,6 +81,10 @@
 >1.跨库查询  
 2.拆分规则  
   
+### 分布式数据存储中间件的核心流程  
+  
+![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E6%A0%B8%E5%BF%83%E6%B5%81%E7%A8%8B.jpeg)  
+  
 ### 什么是Mycat  
   
 Mycat 是开源的分布式数据库中间件，基于阿里的cobar的开源框架之上。它处于数据库服务与应用服务之间。它是进行数据处理与整合的中间服务。  
