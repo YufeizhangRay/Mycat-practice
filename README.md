@@ -2,17 +2,38 @@
   
 ##  mycat学习实践  
   
+- [数据库性能瓶颈](#数据库性能瓶颈)  
+- [大数据量数据库性能解决方案](#大数据量数据库性能解决方案)  
+  - [读写分离](#读写分离)  
+  - [分库分表](#分库分表)  
+- [什么是Mycat](#什么是mycat)  
+  - [名词解析](#名词解析)  
+- [Mysql基于binlog的主从复制原理](#mysql基于binlog的主从复制原理)  
+  - [实现操作](#实现操作)  
+  - [主从复制的延迟](#主从复制的延迟)  
+- [Mycat目录结构](#mycat目录结构)  
+- [Mycat配置文件详解](#mycat配置文件详解)  
+- [表拆分规则](#表拆分规则)  
+  - [分片取舍](#分片取舍)  
+  - [全局序列](#全局序列)  
+- [Mycat注解](#mycat注解)    
+- [Mycat命令行监控工具](#mycat命令行监控工具)  
+- [Mycat弱XA事务机制](#mycat弱XA事务机制)
+- [Mycat节点扩容](#mycat节点扩容)  
+- [Mycat高可用](#mycat高可用)  
+  - [Mycat高可用方案Haproxy安装和配置](#mycat高可用方案haproxy安装和配置)  
+  
 ### 数据库性能瓶颈  
   
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E5%8D%95%E6%95%B0%E6%8D%AE%E5%BA%93.jpeg)  
   
->1.数据库连接数   
+>1.数据库连接数不足(Mysql默认100个)   
 2.表数据量大【空间存储的问题】  
 >>索引  
-命中不了，全表的扫描。  
-命中索引，硬盘级索引，它是存储在硬盘里面，要执行IO操作。  
+命中不了，会进行全表的扫描。  
+命中索引，硬盘级索引，它是存储在硬盘里面，要执行IO操作。当B-tree越来越深，则查找耗时增加。  
   
->3.硬件资源(QPS/TPS) ...  
+>3.硬件资源(QPS/TPS)  
   
 ### 大数据量数据库性能解决方案  
   
@@ -25,14 +46,14 @@
 #### 读写分离  
 区别读、写多数据源方式进行数据的存储和加载。 
 数据的存储(增删改)一般指定写数据源，数据的读取查询指定读数据源(读写分离会基于主从复制)。
-![](https://github.com/YufeizhangRay/image/blob/master/Mycat/读写分离.jpeg)  
-  
+![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E8%AF%BB%E5%86%99%E5%88%86%E7%A6%BB.jpeg)  
+   
 主从形式  
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E4%B8%BB%E4%BB%8E%E6%96%B9%E5%BC%8F.jpeg)  
   
-1，数据库连接  
-  
-2，硬件资源限制（QPS\TPS）  
+解决问题  
+>1.数据库连接   
+2.硬件资源限制（QPS\TPS）  
   
 #### 分库分表 
 对数据的库表进行拆分，用分片的方式对数据进行管理。  
@@ -40,15 +61,26 @@
 垂直拆分  
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E5%9E%82%E7%9B%B4%E6%8B%86%E5%88%86.jpeg)  
   
+解决问题  
+>1.数据库连接   
+2.硬件资源限制（QPS\TPS）  
+  
+带来问题  
+>1.分布式事务问题  
+2.跨库查询  
+
 水平拆分  
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E6%B0%B4%E5%B9%B3%E6%8B%86%E5%88%86.jpeg)  
   
-1，表数据量大的问题 存储空间也解决了  
+解决问题  
+>1.表数据量的存储空间也解决了  
+2.数据库连接  
+2.硬件资源限制（QPS\TPS）  
   
-2，数据库连接  
+带来问题  
+>1.跨库查询  
+2.拆分规则  
   
-2，硬件资源限制（QPS\TPS）  
-
 ### 什么是Mycat  
   
 Mycat 是开源的分布式数据库中间件，基于阿里的cobar的开源框架之上。它处于数据库服务与应用服务之间。它是进行数据处理与整合的中间服务。  
@@ -59,38 +91,46 @@ Mycat 是开源的分布式数据库中间件，基于阿里的cobar的开源框
 #### 名词解析  
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/Mycat%E8%AE%BE%E8%AE%A1.jpeg)  
   
-逻辑库  
-逻辑表  
-分片表  
-分片规则  
-全局表  
-ER表  
-非分片表  
-节点 节点主机(写、读节点主机)  
+```
+逻辑库  db_user db_store
+逻辑表 	  
+  分片表  	用户表        用来分片的表。
+  全局表   数据字典      修改不频繁且与分片表相关。
+  ER表    用户地址表     用户和用户地址具有相关关系，我们不希望它们分开存储。
+非分片表   门店表 店员表  没有进行分片且与分片表没有直接关系的表。
+
+分片规则 userID%2 
+
+节点   三个节点 两个分片db_user节点 主从db_store算一个节点
+节点主机 写、读节点主机  两个粉色区域各表示一个节点主机 
+```
   
 ### Mysql基于binlog的主从复制原理   
   
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E4%B8%BB%E4%BB%8E%E5%A4%8D%E5%88%B6%E5%8E%9F%E7%90%86.jpeg)  
   
->1. master将操作记录到二进制日志(binary log)中 (这些记录叫做二进制日志事件，binary log events)。  
-2. Slave通过I/O Thread异步将master的binary log events拷贝到它的中继日志(relay log)。  
-3. Slave执行relay日志中的事件，匹配自己的配置 将需要执行的数据，在slave服务上执行一遍从 而达到复制数据的目的。  
+>1.master将操作记录到二进制日志(binary log)中(这些记录叫做二进制日志事件，binary log events)。  
+>2.Slave通过I/O Thread异步将master的binary log events拷贝到它的中继日志(relay log)。  
+>3.Slave执行relay日志中的事件，匹配自己的配置将需要执行的数据，在slave服务上执行一遍从而达到复制数据的目的。  
   
 #### 实现操作  
 
 Master操作: 
->1.接入mysql并创建主从复制的用户  
-create user m2ssync identified by 'Qq123!@#';   
+```
+1.接入mysql并创建主从复制的用户  
+create user m2ssync identified by 'Zyf123!@#';   
 2.给新建的用户赋权  
-GRANT REPLICATION SLAVE ON *.* TO 'm2ssync'@'%' IDENTIFIED BY 'Qq123!@#';   
+GRANT REPLICATION SLAVE ON *.* TO 'm2ssync'@'%' IDENTIFIED BY 'Zyf123!@#';   
 3.指定服务ID，开启binlog日志记录，在my.cnf 中加入  
 server-id=137  
 log-bin=dbstore_binlog  
 binlog-do-db=db_store  
 4.通过SHOW MASTER STATUS;查看Master db状态.  
+```
   
 Slave操作:   
->1.指定服务器ID，指定同步的binlog存储位置，在 my.cnf中加入  
+```
+1.指定服务器ID，指定同步的binlog存储位置，在 my.cnf中加入  
 server-id=101  
 relay-log=slave-relay-bin  
 relay-log-index=slave-relay-bin.index  
@@ -100,11 +140,12 @@ replicate_do_db=db_store
 change master to master_host='192.168.8.137',   
 master_port=3306,  
 master_user='m2ssync',  
-master_p assword='Qq123!@#',  
+master_p assword='Zyf123!@#',  
 master_log_file='db_stoere_bi nlog',  
 master_log_pos=0;  
-3.start slave;  
-4. show slave status\G ;查看slave服务器状态  
+>3.start slave;  
+>4.show slave status\G;查看slave服务器状态  
+```
   
 #### 主从复制的延迟  
 >1.当master  tps高于slave的sql线程所能承受的范围  
@@ -112,16 +153,19 @@ master_log_pos=0;
 3.磁盘读写耗时  
   
 判断延迟  
->1.show  slave status \G;  sends_behind_master  0  
-2.mk-heartbeat  timestamp进行实践搓的判断  
+>1.show slave status \G;
+```
+sends_behind_master  0   越小越好，0表示没有延迟。
+```
+>2.mk-heartbeat  
+```
+timestamp进行实践搓的判断  
+```
   
 延迟问题解决  
 >1.配置更高的硬件资源  
-2.把IOthread改变成多线程的方式  
->>mysql5.6库进行多线程的方式  
-GTID进行多线程的方式  
-  
->3.应用程序自己去判断（mycat有这么方案） 
+>2.把I/Othread改变成多线程的方式  
+>3.应用程序自己去判断（mycat有这个方案） 
   
 ### Mycat目录结构  
   
@@ -140,7 +184,18 @@ logs目录日志存放日志文件
 ```
 schema.xml 逻辑库表
 
-dataHost
+schema 逻辑库
+
+sqlMaxLimit 	返回的数据量
+
+table 		分片表
+rule 		分片规则
+primaryKey 	主键
+autoIncrement 	全局ID自增长
+needAddLimit	返回的数据量 可以覆盖sqlMaxLimit
+childTable	ER表 
+
+dataHost 节点主机
 
 balance：负载/读写分离均衡类型。
 取值为
@@ -152,11 +207,8 @@ switchType：主从切换策略
 -1 表示不自动切换
 1 默认值，自动切换
 2 基于 MySQL 主从同步的状态决定是否切换
-
 心跳语句设置为 show slave status
 通过检测 show slave status 中的 "Seconds_Behind_Master","Slave_IO_Running","Slave_SQL_Running" 三个字段以及slaveThreshold 设置的值进行判断是否进行主从切换。
-
-writeType
 
 usingDecrypt 
 可加入usingDecrypt属性来指定密码加密。1开启，0不开启
@@ -164,33 +216,23 @@ usingDecrypt
 java -cp Mycat-server-1.6-RELEASE.jar io.mycat.util.DecryptUtil 	1:host:user:password
 1:host:user:password 中 1 为 db 端加密标志，host 为 dataHost 的 host 名称
 
-dataNode 
+dataNode 节点
 
-sqlMaxLimit
-
-table
-rule, primaryKey, autoIncrement, needAddLimit
-childTable
-joinKey, parentKey
 
 server.xml 启动参数
 
-system
-
 sequnceHandlerType：全局序列的方式
+Processors 进程数
+processorExecutor 进程中的线程数
 
-firewall：黑白名单设置
+firewall 黑白名单设置
 
 user
 benchmark  当前端连接达到设置的值，不再允许这个用户进行接入
-表级的DML权限控制。4位2进制顺序为 insert update select delete 
+privileges 表级的DML权限控制。4位2进制顺序为 insert update select delete 
 
-Processors processorExecutor serverPort managerPort
 
-usingDecrypt
-privileges
-
-rule.xml 拆分规则
+rule.xml 拆分规则 下面单独叙述
 ```
   
 ### 表拆分规则  
@@ -253,7 +295,7 @@ defaultNode 超过范围后的默认节点。
   <property name=“sBeginDate”>2014-01-01</property> <!—开始日期-->
 </function>
 
-注意: 需要提前将分片规划好，建好，否则有可能日期超出实际配置分片数
+注意: 需要提前将分片规划好，建好，否则有可能日期超出实际配置分片数。
 ```
 ```
 按单月小时分片:最小粒度是小时，可以一天最多24个分片，最少1个分片，一个月完后下月从头开始循环。
@@ -264,7 +306,7 @@ defaultNode 超过范围后的默认节点。
 注意事项:每个月月尾，需要手工清理数据
 ```
 ```
-枚举分片:通过在配置文件中配置可能的枚举id，自己配置分片，本规则适用于特定的场景，比如有些业务需要 按照省份或区县来做保存，而全国省份区县固定的
+枚举分片:通过在配置文件中配置可能的枚举id，自己配置分片，本规则适用于特定的场景，比如有些业务需要按照省份或区县来做保存，而全国省份区县固定的。
 <function name="hash-int" class=“io.mycat.route.function.PartitionByFileMap"> 
   <property name="mapFile">partition-hash-int.txt</property> 
   <property name="type">0</property>
@@ -276,10 +318,11 @@ partition-hash-int.txt 配置:
 10010=1
 
 mapFile标识配置文件名称
-type默认值为0(0表示Integer，非零表示String) 默认节点的作用:枚举分片时，如果碰到不识别的枚举值，就让它路由到默认节点
+type默认值为0(0表示Integer，非零表示String) 
+默认节点的作用:枚举分片时，如果碰到不识别的枚举值，就让它路由到默认节点
 ```
 ```
-十进制求模分片:规则为对分片字段十进制取模运算。数据分布最均匀
+十进制求模分片:规则为对分片字段十进制取模运算，数据分布最均匀。
 <function name="mod-long" class=“io.mycat.route.function.PartitionByMod"> <!-- how many data nodes -->
   <property name="count">3</property> 
 </function>
@@ -289,7 +332,7 @@ type默认值为0(0表示Integer，非零表示String) 默认节点的作用:枚
 <function name="sharding-by-substring“ class="io.mycat.route.function.PartitionDirectBySubString"> 
   <property name="startIndex">0</property><!-- zero-based -->
   <property name="size">2</property>
-    <property name="partitionCount">8</property>
+  <property name="partitionCount">8</property>
   <property name="defaultPartition">0</property> 
 </function>
 
@@ -299,7 +342,7 @@ partitionCount 分片数量
 defaultPartition 默认分片
 
 例如 id=05-100000002
-在此配置中代表根据 id 中从 startIndex=0，开始，截取 siz=2 位数字即 05，05 就是获取的分区，如果没传 默认分配到 defaultPartition
+在此配置中代表根据 id 中从 startIndex=0，开始，截取 siz=2 位数字即 05，05 就是获取的分区，如果没传默认分配到 defaultPartition
 ```
 ```
 截取数字hash分片
@@ -318,7 +361,7 @@ hashSlice hash预算位，即根据子字符串中int值 hash运算
 例2:值“aaaabbb2345”，hash预算位-4:0 ，取其中2345进行计算
 ```
 ```
-一致性Hash分片: 此规则优点在于扩容时迁移数据量比较少，前提分片节点比较多，虚拟节点分配多些。虚拟节点少的缺点是会造成数据分布不够均匀如果实际分片数量比较少，迁移量会比较多
+一致性Hash分片: 此规则优点在于扩容时迁移数据量比较少，前提分片节点比较多，虚拟节点分配多些。虚拟节点少的缺点是会造成数据分布不够均匀如果实际分片数量比较少，迁移量会比较多。
 <function name="murmur" class=“io.mycat.route.function.PartitionByMurmurHash">
   <property name=“seed”>0</property><!-- 创建hash对象的种子，默认0-->
   <property name="count">2</property><!-- 要分片的数据库节点数量，必须指定，否则没法分片--> 
@@ -329,6 +372,11 @@ hashSlice hash预算位，即根据子字符串中int值 hash运算
 ```
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E4%B8%80%E8%87%B4%E6%80%A7hash.jpeg)  
   
+```
+1.hash(str) { return  0 -> 2^32 },将整个0-2^32的hash值，作为一个hash环。
+2.取node唯一标示计算出hash值，该hash结果即node在整个hash环中的位置。
+3.将数据进行hash计算之后，顺时针找对应的node，改node即为该数据的服务node。
+```
 ```
 范围求模分片:先进行范围分片计算出分片组，组内再求模。
 优点可以避免扩容时的数据迁移，又可以一定程度上避免范围分片的热点问题
@@ -383,7 +431,7 @@ partition-pattern.txt配置
 #### 全局序列  
 ```
 1.本地文件方式
-  sequnceHandlerType  = 0
+  sequnceHandlerType = 0
 	配置sequence_conf.properties
 	使用next value for MYCATSEQ_XXX
 2.数据库方式
@@ -403,6 +451,7 @@ partition-pattern.txt配置
 	 Redis 
 	 …
 ```
+  
 ### Mycat注解  
   
 ```
@@ -412,19 +461,23 @@ partition-pattern.txt配置
 /*!mycat: sql=select 1 from users*/ create table test2(id int); 
 /*!mycat: db_type=slave*/ select * from employee
 ```
+注解可以让Mycat解析本来无法解析的正常sql操作语句。注解的作用是分片路由，然后将后面的指令直接在相应的分片上执行。  
+  
 关联查询  
 >1.用好ER表   
 2.善用全局表  
 3.使用注解 /*!mycat:catlet=io.mycat.catlets.ShareJoin */  
 select * from users u,employee em on u.phoneNum=em.phoneNum where u.phoneNum ='13633333333' ;  
+跨库查询只能支持两张物理表，并且两张物理表必须在同一个逻辑表里。  
   
 ### Mycat命令行监控工具  
   
-• 重载配置文件 
-• 查看运行状态 
-• 提供性能数据
+• 重载配置文件  
+• 查看运行状态  
+• 提供性能数据 
 ```
-mysql -uuser –ppwd -P9066 show @@help 查看所有命令 
+mysql -uuser –ppwd -P9066 
+show @@help 查看所有命令 
 reload @@config
 reload @@config_all
 show @@database
@@ -438,6 +491,7 @@ kill @@connection id1，id2
 show @@heartbeat
 show @@sysparam
 ```
+  
 ### Mycat弱XA事务机制  
   
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/%E4%BA%8C%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4.jpeg)  
@@ -486,7 +540,7 @@ mysql -h192.168.8.151 -uroot -p123456 -P8066  -f db_user < userAddress.sql
 ![](https://github.com/YufeizhangRay/image/blob/master/Mycat/Mycat%E5%8D%95%E7%82%B9.jpeg)  
 Mycat单点的情况下一旦宕机则会导致故障，于是需要多个Mycat同时使用，并用HAproxy作为负载均衡。  
   
-HAproxy可以提供七层的负载均衡功能。  
+HAproxy可以提供四层和七层的负载均衡功能，这里我们使用四层负载。  
   
 四层负载均衡  
 四层负载均衡也称为四层交换机，它主要是通过分析IP层及TCP/UDP层的流量实现的基于IP加端口的负载均衡  
@@ -516,47 +570,47 @@ make install PREFIX=/usr/local/haproxy
 	创建配置文件
 	vi /usr/local/haproxy/haproxy.cfg 并编辑文件
 	内容如下：
-		global
-			log         127.0.0.1 local2
-			pidfile     /var/run/haproxy.pid
-			maxconn     4000
-			daemon
-		defaults
-			log global
-			option dontlognull
-			retries 3
-			option redispatch
-			maxconn 2000
-			timeout connect 5000
-			timeout client 50000
-			timeout server 50000
+	global
+		log         127.0.0.1 local2
+		pidfile     /var/run/haproxy.pid
+		maxconn     4000
+		daemon
+	defaults
+		log global
+		option dontlognull
+		retries 3
+		option redispatch
+		maxconn 2000
+		timeout connect 5000
+		timeout client 50000
+		timeout server 50000
 
-listen admin_status
-			bind 0.0.0.0:1080 
-			stats uri /admin ##haproxy自带的管理页面通过http://ip:port/admin访问
-			stats auth admin:admin  ##管理页面的用户名和密码
-			mode http
-			option httplog
+	listen admin_status
+		bind 0.0.0.0:1080 
+		stats uri /admin ##haproxy自带的管理页面通过http://ip:port/admin访问
+		stats auth admin:admin  ##管理页面的用户名和密码
+		mode http
+		option httplog
 
-listen allmycat_service
-			bind 0.0.0.0:8096 ##转发到 mycat 的 8066 端口，即 mycat 的服务端口
-			mode tcp
-			option tcplog
-			option httpchk OPTIONS * HTTP/1.1\r\nHost:\ www
-			balance roundrobin
-			server mycat_151 192.168.8.151:8066 check port 48700 inter 5s rise 2 fall 3
-			server mycat_35 192.168.8.35:8066 check port 48700 inter 5s rise 2 fall 3
-			timeout server 20000
-
-listen allmycat_admin
-			bind 0.0.0.0:8097 ##转发到 mycat 的 9066 端口，即 mycat 的管理控制台端口
-			mode tcp
-			option tcplog
-			option httpchk OPTIONS * HTTP/1.1\r\nHost:\ www
-			balance roundrobin
-			server mycat_151 192.168.8.151:9066 check port 48700 inter 5s rise 2 fall 3
-			server mycat_35 192.168.8.35:9066 check port 48700 inter 5s rise 2 fall 3
-			timeout server 20000
+	listen allmycat_service
+		bind 0.0.0.0:8096 ##转发到 mycat 的 8066 端口，即 mycat 的服务端口
+		mode tcp
+		option tcplog
+		option httpchk OPTIONS * HTTP/1.1\r\nHost:\ www
+		balance roundrobin
+		server mycat_151 192.168.8.151:8066 check port 48700 inter 5s rise 2 fall 3
+		server mycat_35 192.168.8.35:8066 check port 48700 inter 5s rise 2 fall 3
+		timeout server 20000
+		
+	listen allmycat_admin
+		bind 0.0.0.0:8097 ##转发到 mycat 的 9066 端口，即 mycat 的管理控制台端口
+		mode tcp
+		option tcplog
+		option httpchk OPTIONS * HTTP/1.1\r\nHost:\ www
+		balance roundrobin
+		server mycat_151 192.168.8.151:9066 check port 48700 inter 5s rise 2 fall 3
+		server mycat_35 192.168.8.35:9066 check port 48700 inter 5s rise 2 fall 3
+		timeout server 20000
 
 4.配置haproxy的日志输出
 	haproxy采用rsyslog的方式进行日志配置
@@ -589,31 +643,30 @@ Xinetd
 	进入该目录cd /etc/xinetd.d  
 	并新建 mycat_status  shell脚本，vim mycat_status
 	内容如下：
-		service mycat_status   #代表被托管服务的名称
-		{
-			flags = REUSE
-			socket_type = stream				 # socket连接方式
-			port = 48700						 # 服务监听的端口
-			wait = no							 # 是否并发
-			user = root							 # 以什么用户进行启动
-			server =/usr/local/bin/mycat_status  # 被托管服务的启动脚本
-			log_on_failure += USERID 			 # 设置失败时，UID添加到系统登记表
-			disable = no       					 #是否禁用托管服务，no表示开启托管服务
-		}
+	service mycat_status   #代表被托管服务的名称
+	{
+		flags = REUSE
+		socket_type = stream			# socket连接方式
+		port = 48700				# 服务监听的端口
+		wait = no				# 是否并发
+		user = root				# 以什么用户进行启动
+		server =/usr/local/bin/mycat_status     # 被托管服务的启动脚本
+		log_on_failure += USERID 		# 设置失败时，UID添加到系统登记表
+		disable = no       			#是否禁用托管服务，no表示开启托管服务
+	}
 	保存退出
 	
 创建托管服务启动脚本/usr/local/bin/mycat_status
 	vim /usr/local/bin/mycat_status
 	内容如下:
-		mycat=`/root/mycat/bin/mycat status |grep 'not running'| wc -l`
-		if [ "$mycat" = "0" ];
-		then
-			/bin/echo -e "HTTP/1.1 200 OK\r\n"
-		else
-			/bin/echo -e "HTTP/1.1 503 Service Unavailable\r\n"
-		fi
-		
-保存退出 并赋予执行权限chmod +x /usr/local/bin/mycat_status
+	mycat=`/root/mycat/bin/mycat status |grep 'not running'| wc -l`
+	if [ "$mycat" = "0" ];
+	then
+		/bin/echo -e "HTTP/1.1 200 OK\r\n"
+	else
+		/bin/echo -e "HTTP/1.1 503 Service Unavailable\r\n"
+	fi	
+        保存退出 并赋予执行权限chmod +x /usr/local/bin/mycat_status
 	验证脚本的正确性 sh /usr/local/bin/mycat_status  如果返回 200OK字样说明成功
 	
 加入mycat_status服务
@@ -638,22 +691,22 @@ keepalive安装  （192.168.8.35 -> MASTER   192.168.8.151 -> BACKUP ）
 	find / -name 'keepalived.conf'
 	vi /etc/keepalived/keepalived.conf
 	内容如下
-		! Configuration File for keepalived
-		vrrp_instance VI_1 {
-				state MASTER            #192.168.8.151 上改为 BACKUP
-				interface ens33         #对外提供服务的网络接口
-				virtual_router_id 100   #VRRP 组名，两个节点的设置必须一样，以指明各个节点属于同一 VRRP 组
-				priority 150            #数值愈大，优先级越高,192.168.8.151 上改为比150小的正整数
-				advert_int 1            #同步通知间隔
-				authentication {        #包含验证类型和验证密码。类型主要有 PASS、AH 两种，通常使用的类型为 PASS，据说AH 使用时有问题
-						auth_type PASS
-						auth_pass 1111
-				}
-				virtual_ipaddress { #vip 地址    ens33  通过ifconfig获取
-						192.168.8.233 dev ens33 scope global
-				}
-		} 
-		编辑保存
+	! Configuration File for keepalived
+	vrrp_instance VI_1 {
+		state MASTER            #192.168.8.151 上改为 BACKUP
+		interface ens33         #对外提供服务的网络接口
+		virtual_router_id 100   #VRRP 组名，两个节点的设置必须一样，以指明各个节点属于同一 VRRP 组
+		priority 150            #数值愈大，优先级越高,192.168.8.151 上改为比150小的正整数
+		advert_int 1            #同步通知间隔
+		authentication {        #包含验证类型和验证密码。类型主要有 PASS、AH 两种，通常使用的类型为 PASS，据说AH 使用时有问题
+			auth_type PASS
+			auth_pass 1111
+		}
+		virtual_ipaddress { #vip 地址    ens33  通过ifconfig获取
+			192.168.8.233 dev ens33 scope global
+		}
+	} 
+	编辑保存
 	
 启动keepalived，执行命令 service keepalived start
 	
@@ -662,34 +715,34 @@ keepalive安装  （192.168.8.35 -> MASTER   192.168.8.151 -> BACKUP ）
 	
 1.创建check_haproxy.sh 并编辑内容  vi /root/script/check_haproxy.sh
 	内容如下：
-		#!/bin/bash
-		LOGFILE='/root/log/checkHaproxy.log'
-		date >> $LOGFILE
-		count=`ps aux | grep -v grep | grep /usr/local/haproxy/sbin/haproxy | wc -l`
-		if [ $count = 0 ];
-		then
-				echo 'first check fail , restart haproxy !' >> $LOGFILE
-				/usr/local/haproxy/sbin/haproxy -f /usr/local/haproxy/haproxy.cfg
-		else
-				exit 0
-		fi   
-    sleep 3
+	#!/bin/bash
+	LOGFILE='/root/log/checkHaproxy.log'
+	date >> $LOGFILE
 	count=`ps aux | grep -v grep | grep /usr/local/haproxy/sbin/haproxy | wc -l`
+	if [ $count = 0 ];
+	then
+		echo 'first check fail , restart haproxy !' >> $LOGFILE
+		/usr/local/haproxy/sbin/haproxy -f /usr/local/haproxy/haproxy.cfg
+	else
+		exit 0
+	fi   
+        sleep 3
+	count=`ps aux | grep -v grep | grep /usr/local/haproxy/sbin/haproxy | wc -l`
+	if [ $count = 0 ];
+	then
+		echo 'second check fail , stop keepalive service !' >> $LOGFILE
+		service keepalived stop
+	else
+		echo 'second check success , start keepalive service !' >> $LOGFILE
+		keepalived=` ps aux | grep -v grep | grep /usr/sbin/keepalived | wc -l`
 		if [ $count = 0 ];
 		then
-				echo 'second check fail , stop keepalive service !' >> $LOGFILE
-				service keepalived stop
-		else
-				echo 'second check success , start keepalive service !' >> $LOGFILE
-				keepalived=` ps aux | grep -v grep | grep /usr/sbin/keepalived | wc -l`
-				if [ $count = 0 ];
-				then
-					service keepalived start
-				fi
-				exit 0
+			service keepalived start
 		fi
+		exit 0
+	fi
 	
 2.执行 crontab -e 编辑定时任务 每一分钟检测haproxy服务存活，如果服务启动不了，停掉keepalived服务，vip即转发至backup的192.168.8.151的机器
-	* * * * * sh /root/script/check_haproxy.sh	
+	sh /root/script/check_haproxy.sh	
 ```
 	
