@@ -745,6 +745,6 @@ keepalived提供了很多的配置来做服务的检测和降级，但是我们�
 	fi
 	
 2.执行 crontab -e 编辑定时任务 每一分钟检测haproxy服务存活，如果服务启动不了，停掉keepalived服务，vip即转发至backup的192.168.8.151的机器
-	sh /root/script/check_haproxy.sh	
+	* * * * * sh /root/script/check_haproxy.sh	
 ```
 	
